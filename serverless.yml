@@ -1,0 +1,95 @@
+org: inxspin
+app: kinesis-sls-subscriber
+frameworkVersion: '4'
+service: kinesis-sls-subscriber
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ap-south-1
+  stage: ${opt:stage, 'dev'}
+  accountId: 897722688252
+  vpc:
+    securityGroupIds:
+      - sg-02850da9354ba0076
+    subnetIds:
+      - subnet-0240931caddfc2832
+      - subnet-0a10e7087013cfe1c
+      - subnet-09de41cd4377db10a
+  environment:
+    STREAM_NAME: ${param:STREAM_NAME}
+    REGION: ap-south-1
+    PG_HOST: ${param:PG_HOST}
+    PG_PORT: ${param:PG_PORT}
+    PG_USER: ${param:PG_USER}
+    PG_PASSWORD: ${param:PG_PASSWORD}
+    PG_DATABASE: ${param:PG_DATABASE}
+    REDIS_HOST: ${param:REDIS_HOST}
+    STAGE: ${param:STAGE}
+    # STREAM_NAME: inxKinesisDataStream
+    # REGION: ap-south-1
+    # PG_HOST: ${env:PG_HOST}
+    # PG_PORT: ${env:PG_PORT}
+    # PG_USER: ${env:PG_USER}
+    # PG_PASSWORD: ${env:PG_PASSWORD}
+    # PG_DATABASE: ${env:PG_DATABASE}
+    # REDIS_HOST: ${env:REDIS_HOST}
+    # STAGE: ${env:STAGE}
+
+resources:
+  Resources:
+    InxKinesisLambdaSubscriberCustomRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: InxKinesisLambdaSubscriberCustomRole
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        Policies:
+          - PolicyName: InxKinesisSubscriberCustomPolicy
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - ec2:CreateNetworkInterface
+                    - ec2:DeleteNetworkInterface
+                    - ec2:DescribeNetworkInterfaces
+                  Resource: "*"
+                - Effect: Allow
+                  Action:
+                    - kinesis:PutRecord
+                    - kinesis:PutRecords
+                    - kinesis:GetRecords
+                    - kinesis:GetShardIterator
+                    - kinesis:DescribeStream
+                    - kinesis:DescribeStreamSummary
+                    - kinesis:ListShards
+                    - kinesis:ListStreams
+                  Resource: arn:aws:kinesis:${self:provider.region}:${self:provider.accountId}:stream/${self:provider.environment.STREAM_NAME}
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource: "arn:aws:logs:${self:provider.region}:${self:provider.accountId}:*"
+
+functions:
+  subscribeMessages:
+    handler: build/handler.subscribeMessages
+    events:
+      - schedule:
+          rate: rate(1 minute)
+          enabled: true
+
+custom:
+  serverless-offline:
+    httpPort: 6000
+    lambdaPort: 3004
+  warmUp: true
